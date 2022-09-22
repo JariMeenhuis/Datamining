@@ -1,0 +1,153 @@
+ ---
+title: "Data Mining, KNN"
+author: "Jörgen Weterings - Author, Jari Meenhuis - Reviewer"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_notebook:
+  toc: yes
+toc_depth: 2
+ ---
+ 
+
+```{r}
+install.packages("readr")
+install.packages("class")
+install.packages("magrittr")
+install.packages("caret")
+install.packages("e1071")
+
+library(readr)
+library(tidyverse)
+library(class)
+library(magrittr)
+library(caret)
+library(lattice)
+library(e1071)
+```
+
+
+---
+## Business Understanding
+For the donation of blood it is necessary to check the person giving the blood on invective diseases. It is in the greatest interest of the person receiving blood that he or she will not be infected with a disease. The person receiving blood will most likely already be weakened because of a disease or they are recovering from an operation. Therefore it is necessary for the blood bank to test each person giving blood on invective diseases.  
+
+
+## Data Understanding
+*"Choose a suitable dataset from [this](https://github.com/HAN-M3DM-Data-Mining/assignments/tree/master/datasets) folder and train  your own kNN model. Follow all the steps from the CRISP-DM model."*
+The chosen data set is the HCV data set and this dataset consists of a a column with; patient number, whether they are a blood donor or not, age, sex and different blood values
+
+```{r}
+url <- "https://raw.githubusercontent.com/HAN-M3DM-Data-Mining/assignments/master/datasets/KNN-hcvdat0.csv"
+rawDF <- read_csv(url)
+View(rawDF)
+str(rawDF)
+```
+
+## Data Preparation
+
+# The first row of data does not contribute to the end result so we can delete that one
+```{r}
+cleanDF <- rawDF[,-1]
+head(cleanDF)
+View(cleanDF)
+```
+
+# there are also NA values which have to be removed
+```{r}
+cleanDF2 <- na_omit(cleanDF) #the function is na.omit, when you use na_omit you will get an error.
+head(cleanDF2)
+View(cleanDF2)
+cleanDF3 <- drop_na(cleanDF)
+head(cleanDF3)
+View(cleanDF3)
+#in line 59 you have used the function drop_na, you have described this function correctly but this function does the same thing as 'na.omit' . This makes cleanDF2 and cleanDF3 the same, so one of these functions can be removed. 
+```
+
+# normalizing the data
+```{r}
+cntDiag <- table(cleanDF$Category) #Here you refer to cleanDF, making the function calculate through with the wrong data. As a result, NA errors will remain in the data. Instead refer to cleanDF3.
+
+propDiag <- round(prop.table(cntDiag)*100, digits = 1)
+
+cntDiag
+propDiag
+
+cleanDF <- cleanDF %>% factor #Again, you refer to cleanDF here, when you do this the NA errors will be in it. Instead, you should refer to cleanDF$Category.
+
+cleanDF <- fct_collapse(cleanDF$Category, donor = "0=Blood Donor", hepatitis = c("0s=suspect Blood Donor", "1=Hepatitis", "2=Fibrosis", "3=Cirrhosis"))
+levels(cleanDF2$Category)
+
+head(cleanDF, 10)
+summary(cleanDF4[c("CREA", "GGT", "PROT")])
+# In the lines above you refer to cleanDF, cleanDF2 and even cleanDF4 which doesn't even exists, when using these data the outcome won't be right. Instead use cleanDF3.
+
+normalize <- function(x) { 
+  return ((max(x) - min(x)) / (x - min(x))) 
+}
+#This error was very annoying, because i didn't get an error. Here you have changed the order of the partial sum, which causes you to arrive at wrong values every time. You can fix this by doing the following:' return ((x - min(x)) / (max(x) - min(x))) '
+```
+
+# creating the test and training sets
+```{r}
+testSet1 <- c(1:2)
+testSet2 <- c(3:5) * 10 #Here you have made the range of the test set small and different. You have to put in the same values to let the function work. So make it 1:5, 1:5.
+
+cat("testSet1:", testSet1, "\n")
+cat("testSet2:", testSet2, "\n")
+
+cat("Normalized testSet1:", normalize(testSet1), "\n")
+cat("Normalized testSet2:", normalize(testSet2))
+
+nCols <- dim(cleanDF)[2]
+nRows <- dim(cleanDF)[1] 
+NorDF <- cleanDF[4:nCols]#Here you refer once again to cleanDF and cleanDF4, when you do this you will get the wrong values.
+View(NorDF)
+cleanDF3_no <- sapply(1:10,
+                      function(x) {
+                        normalize(NorDF[,x])
+                      }) %>% as.data.frame()
+summary(cleanDF3_no[c("CREA", "GGT", "PROT")])
+
+count(cleanDF3_no) #Here you should refer to cleanDF3, otherwise you will calculate with the wrong values.
+sampleVec <- sample(c(1:nRows), 489)
+trainDF_feat <- rawDF[sampleVec, ]
+testDF_feat <- rawDF[-sampleVec, ]#You refer to rawDF, when doing this you will get the wrong values, you should refer to cleanDF3_no.
+trainDF_labels <- cleanDF[sampleVec, 1]
+testDF_labels <- cleanDF[-sampleVec, 1]#You refer to cleanDF, you should refer to cleanDF3 otherwise you will get the wrong values.
+cl <- trainDF_labels[,1, drop=TRUE]
+```
+
+## data Modelingm
+```{r}
+cleanDF_test_predi <- knn(train = as.matrix(trainDF_feat), test = as.matrix(testDF_feat), cl = as.matrix(trainDF_labels), k = 5)
+#Why do you chose the value k = 5, aren;t there other values that will be better? 
+head(cleanDF_test_predi)
+confusionMatrix(cleanDF_test_predi, testDF_labels[[0]], positive = NULL, dnn = c("Prediction", "True"))
+#At last you wrote the value 0 in the function 'testDF_labels[[0]], this value should be 1.
+```
+
+## Evaluation and Deployment
+
+The model has an accuracy of 89%, which could cause a higher risk factor than desired for something that can potentially harm the receiver of the blood. Next to that you rather have a false positive than a false negative. With a false positive there is no risk for the receiving party of getting an invective disease that may kill them without proper treatment. In this model there are no false positives but quite a few false negatives, this could be the case because the values of the people with (suspected) Hepatitis is so small that the model couldn't train to recognize it properly. If you look at the values there are really small differences between the people with (suspected) hepatitis and the healthy ones, so that makes it extra hard to train on it. In the training group there were only 48 cases in which there was hepatitis so that makes it difficult for the model to be able to really determine the small differences. 
+
+
+##reviewer adds suggestions for improving the model (the improvement suggestions can also be found in the codes)
+line 56 : The function is na.omit, when you use na_omit you will get an error.
+line 59 : You have used the function drop_na, you have described this function correctly but this function does the same thing as 'na.omit' . This makes cleanDF2 and cleanDF3 the same, so one of these functions can be removed. 
+line 67: Here you refer to cleanDF, making the function calculate through with the wrong data. As a result, NA errors will remain in the data. Instead refer to cleanDF3.
+line 74 : Again, you refer to cleanDF here, when you do this the NA errors will be in it. Instead, you should refer to cleanDF$Category.
+line 76-80 : In the lines above you refer to cleanDF, cleanDF2 and even cleanDF4 which doesn't even exists, when using these data the outcome won't be right. Instead use cleanDF3.
+line 84 : This error was very annoying, because i didn't get an error. Here you have changed the order of the partial sum, which causes you to arrive at wrong values every time. You can fix this by doing the following:' return ((x - min(x)) / (max(x) - min(x))) '
+line 92 : Here you have made the range of the test set small and different. You have to put in the same values to let the function work. So make it 1:5, 1:5.
+line 102 : Here you refer once again to cleanDF and cleanDF4, when you do this you will get the wrong values.
+line 110 : Here you should refer to cleanDF3, otherwise you will calculate with the wrong values.
+line 113 : You refer to rawDF, when doing this you will get the wrong values, you should refer to cleanDF3_no.
+line 115 : You refer to cleanDF, you should refer to cleanDF3 otherwise you will get the wrong values.
+line 122 : Why do you chose the value k = 5, aren't there other values that will be better? 
+line 125 : At last you wrote the value 0 in the function 'testDF_labels[[0]], this value should be 1.
+
+
+
+
+
+
+
